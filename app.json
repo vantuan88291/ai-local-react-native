@@ -1,7 +1,7 @@
 {
-  "name": "AI Agents",
-  "slug": "ai-agents",
-  "scheme": "ai-agents",
+  "name": "AI local",
+  "slug": "ai-local",
+  "scheme": "ai-local",
   "version": "1.0.0",
   "orientation": "portrait",
   "userInterfaceStyle": "automatic",

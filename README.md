@@ -1,4 +1,4 @@
-# AI Agents - React Native AI Chat Application
+# AI Local - React Native AI Chat Application
 
 A powerful React Native mobile application that enables users to chat with various AI language models directly on their devices. Built with Expo and leveraging on-device AI capabilities through Llama models, this app provides a seamless, private, and offline-capable AI conversation experience.
 
