@@ -2,7 +2,9 @@ import { useState, useEffect, useMemo, useCallback } from "react"
 
 import { AVAILABLE_MODELS, ModelInfo } from "@/screens/ai/hooks/models"
 import { fetchAiModels } from "@/services/api"
+import { load, save } from "@/utils/storage";
 
+const LIST_MODELS = "LIST_MODELS"
 const parseSizeToBytes = (sizeStr: string): number => {
   const normalized = sizeStr.trim().toUpperCase()
   const match = normalized.match(/^([\d.]+)\s*(KB|MB|GB)?$/i)
@@ -42,15 +44,12 @@ interface ApiResponse {
 
 export const useModels = () => {
   const [models, setModels] = useState<ModelInfo[]>(AVAILABLE_MODELS)
-  const [isLoading, setIsLoading] = useState<boolean>(true)
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false)
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
 
   const loadModels = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
       setIsRefreshing(true)
-    } else {
-      setIsLoading(true)
     }
 
     try {
@@ -71,11 +70,10 @@ export const useModels = () => {
               size: item.info1 || "0 MB",
             }))
 
+            save(LIST_MODELS, mappedModels)
             setModels(mappedModels)
             if (isRefresh) {
               setIsRefreshing(false)
-            } else {
-              setIsLoading(false)
             }
             return
           }
@@ -92,14 +90,17 @@ export const useModels = () => {
     } finally {
       if (isRefresh) {
         setIsRefreshing(false)
-      } else {
-        setIsLoading(false)
       }
     }
   }, [])
 
   useEffect(() => {
     loadModels(false)
+    // @ts-ignore
+    const listCache: any[] = load(LIST_MODELS)
+    if (listCache?.length) {
+      setModels(listCache)
+    }
   }, [loadModels])
 
   const sortedModels = useMemo(() => {
@@ -121,7 +122,7 @@ export const useModels = () => {
 
   return {
     models: sortedModels,
-    isLoading,
+    isLoading: false,
     isRefreshing,
     sortOrder,
     toggleSortOrder,

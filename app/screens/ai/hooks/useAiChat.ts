@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, useEffect, useMemo } from "react"
-import { FlatList } from "react-native"
+import { FlatList, Keyboard, Platform } from "react-native";
 import { llama } from "@react-native-ai/llama"
 import { LlamaLanguageModel } from "@react-native-ai/llama/lib/typescript/ai-sdk"
 import { useRoute } from "@react-navigation/native"
@@ -405,10 +405,19 @@ export const useAiChat = () => {
       setMessages(listMsg)
       setTimeout(() => {
         scrollToBottomDebounced()
-      }, 1000)
+      }, 500)
     }
-
+    function onKeyboardDidShow() {
+      setTimeout(() => {
+        scrollToBottomDebounced()
+      }, 500)
+    }
+    const showSubscription = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      onKeyboardDidShow,
+    )
     return () => {
+      showSubscription.remove()
       if (msgRef.current?.length) {
         save(modelId, msgRef.current)
       }

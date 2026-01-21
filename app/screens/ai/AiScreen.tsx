@@ -101,6 +101,7 @@ export const AiScreen: FC<AppStackScreenProps<"ai">> = function AiScreen() {
               data={messages}
               renderItem={renderMessage}
               keyExtractor={keyExtractor}
+              removeClippedSubviews
               contentContainerStyle={themed($listContent)}
               showsVerticalScrollIndicator={true}
               keyboardShouldPersistTaps="handled"
