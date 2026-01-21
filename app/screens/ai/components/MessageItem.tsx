@@ -38,7 +38,7 @@ export const MessageItem: FC<MessageItemProps> = ({ message, modelName }) => {
           />
         ) : (
           <Markdown style={$markdownStyles(theme)} mergeStyle={false}>
-            {message.text || "..."}
+            {message.text || "Thinking..."}
           </Markdown>
         )}
       </Box>
