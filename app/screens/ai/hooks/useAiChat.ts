@@ -1,8 +1,9 @@
 import { useCallback, useRef, useState, useEffect, useMemo } from "react"
 import { FlatList } from "react-native"
 import { llama } from "@react-native-ai/llama"
+import { LlamaLanguageModel } from "@react-native-ai/llama/lib/typescript/ai-sdk"
 import { useRoute } from "@react-navigation/native"
-import { streamText } from "ai"
+import { generateText } from "ai"
 import { DropdownAlertType } from "react-native-dropdownalert"
 
 import { onAlert } from "@/app"
@@ -10,7 +11,6 @@ import { AppStackScreenProps } from "@/navigators/navigationTypes"
 import { Message, ModelLoadingState, ModelStatus } from "@/screens/ai/hooks/models"
 import { load, remove, save } from "@/utils/storage"
 
-const SCROLL_THROTTLE_MS = 200
 const SCROLL_DEBOUNCE_MS = 100
 
 const ERROR_MESSAGE = "Sorry, an error occurred. Please try again."
@@ -32,7 +32,7 @@ export const useAiChat = () => {
   const [downloadProgress, setDownloadProgress] = useState<number>(0)
   const [selectedModelId, setSelectedModelId] = useState<string | null>(modelId)
   const [useContextHistory, setUseContextHistory] = useState<boolean>(true)
-  const modelRef = useRef<any>(null)
+  const modelRef = useRef<LlamaLanguageModel>(null)
   const msgRef = useRef<any[]>([])
   const isSetupInProgressRef = useRef<boolean>(false)
   const isMountedRef = useRef<boolean>(true)
@@ -100,32 +100,9 @@ export const useAiChat = () => {
             model,
             prompt: userMessageText,
           }
-      const { textStream } = streamText(streamParams)
-
-      let fullText = ""
-      let lastScrollTime = 0
-      let started = false
-      // Stream and update message as text comes in
-      for await (const delta of textStream) {
-        if (!started) {
-          fullText = delta
-          started = true
-        } else {
-          fullText += delta
-        }
-
-        // Update AI message with streaming text
-        setMessages((prev) =>
-          prev.map((msg) => (msg.id === aiMessageId ? { ...msg, text: fullText } : msg)),
-        )
-
-        // Throttle scroll updates during streaming
-        const now = Date.now()
-        if (now - lastScrollTime > SCROLL_THROTTLE_MS) {
-          scrollToBottomDebounced()
-          lastScrollTime = now
-        }
-      }
+      const { text } = await generateText(streamParams)
+      setMessages((prev) => prev.map((msg) => (msg.id === aiMessageId ? { ...msg, text } : msg)))
+      scrollToBottomDebounced()
 
       if (isMountedRef.current && !abortController.signal.aborted) {
         setIsLoading(false)
@@ -198,7 +175,6 @@ export const useAiChat = () => {
     },
     [selectedModelId],
   )
-
   /**
    * Remove model from device
    */
@@ -280,7 +256,6 @@ export const useAiChat = () => {
       console.error("[useAiChat] Error clearing conversation:", error)
     }
   }, [modelId])
-
   /**
    * Setup and download model
    */
@@ -363,7 +338,8 @@ export const useAiChat = () => {
       } catch (error) {
         console.error("[useAiChat] Error setting up model:", error)
         const errorMessage = error instanceof Error ? error.message : "Failed to setup model"
-
+        const model = llama.languageModel(modelId)
+        model.remove()
         // Determine error type based on current status
         onAlert({
           type: DropdownAlertType.Error,
