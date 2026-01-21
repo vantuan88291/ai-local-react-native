@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from "react"
+import { llama } from "@react-native-ai/llama"
 
 import { AVAILABLE_MODELS, ModelInfo } from "@/screens/ai/hooks/models"
 import { fetchAiModels } from "@/services/api"
-import { load, save } from "@/utils/storage";
+import { load, remove, save } from "@/utils/storage"
 
 const LIST_MODELS = "LIST_MODELS"
 const parseSizeToBytes = (sizeStr: string): number => {
@@ -46,6 +47,7 @@ export const useModels = () => {
   const [models, setModels] = useState<ModelInfo[]>(AVAILABLE_MODELS)
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false)
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
+  const [downloadedModels, setDownloadedModels] = useState<Set<string>>(new Set())
 
   const loadModels = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
@@ -120,6 +122,77 @@ export const useModels = () => {
     loadModels(true)
   }, [loadModels])
 
+  const checkModelStatus = useCallback(async (modelId: string): Promise<boolean> => {
+    try {
+      const model = llama.languageModel(modelId)
+      const isDownloaded = await model.isDownloaded()
+      return isDownloaded
+    } catch (error) {
+      console.error(`[useModels] Error checking model ${modelId}:`, error)
+      return false
+    }
+  }, [])
+
+  const checkAllModels = useCallback(async () => {
+    if (sortedModels.length === 0) return
+
+    const statusPromises = sortedModels.map(async (model) => {
+      const isDownloaded = await checkModelStatus(model.id)
+      return { modelId: model.id, isDownloaded }
+    })
+
+    const results = await Promise.all(statusPromises)
+    const downloadedSet = new Set<string>()
+
+    results.forEach(({ modelId, isDownloaded }) => {
+      if (isDownloaded) {
+        downloadedSet.add(modelId)
+      }
+    })
+
+    setDownloadedModels(downloadedSet)
+  }, [sortedModels, checkModelStatus])
+
+  useEffect(() => {
+    if (sortedModels.length > 0) {
+      checkAllModels()
+    }
+  }, [sortedModels, checkAllModels])
+
+  const isModelDownloaded = useCallback(
+    (modelId: string) => {
+      return downloadedModels.has(modelId)
+    },
+    [downloadedModels],
+  )
+
+  const refreshDownloadStatus = useCallback(() => {
+    checkAllModels()
+  }, [checkAllModels])
+
+  const removeModel = useCallback(
+    async (modelId: string) => {
+      try {
+        const model = llama.languageModel(modelId)
+        await model.remove()
+
+        // Remove conversation history if exists
+        try {
+          remove(modelId)
+        } catch (error) {
+          console.error(`[useModels] Error removing conversation history for ${modelId}:`, error)
+        }
+
+        // Refresh download status after removal
+        await checkAllModels()
+      } catch (error) {
+        console.error(`[useModels] Error removing model ${modelId}:`, error)
+        throw error
+      }
+    },
+    [checkAllModels],
+  )
+
   return {
     models: sortedModels,
     isLoading: false,
@@ -127,5 +200,8 @@ export const useModels = () => {
     sortOrder,
     toggleSortOrder,
     refresh,
+    isModelDownloaded,
+    refreshDownloadStatus,
+    removeModel,
   }
 }
