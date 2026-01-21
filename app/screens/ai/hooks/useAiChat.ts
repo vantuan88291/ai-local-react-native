@@ -211,6 +211,7 @@ export const useAiChat = () => {
       const model = llama.languageModel(selectedModelId)
 
       remove(modelId)
+      setMessages([])
       // Remove model from device
       await model.remove()
 
@@ -406,6 +407,9 @@ export const useAiChat = () => {
     const listMsg: any[] = load(modelId)
     if (listMsg?.length) {
       setMessages(listMsg)
+      setTimeout(() => {
+        scrollToBottomDebounced()
+      }, 1000)
     }
 
     return () => {

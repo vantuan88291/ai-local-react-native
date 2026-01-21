@@ -104,8 +104,6 @@ const $modelItem: ThemedStyle<ViewStyle> = () => ({
 const $modelItemContainer: ThemedStyle<ViewStyle> = ({ spacing, colors }) => ({
   paddingVertical: spacing.md,
   paddingHorizontal: spacing.md,
-  borderBottomWidth: 1,
-  borderBottomColor: colors.separator,
   borderRadius: 8,
   backgroundColor: colors.palette.neutral100,
 })
