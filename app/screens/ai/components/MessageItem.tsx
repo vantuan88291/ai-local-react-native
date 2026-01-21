@@ -1,9 +1,9 @@
 import { FC } from "react"
-import { TextStyle, View, ViewStyle } from "react-native"
+import { Text, TextStyle, View, ViewStyle } from "react-native"
 import Markdown from "react-native-markdown-display"
 
 import { Box } from "@/components/Box"
-import { Text } from "@/components/Text"
+import { Text as AppText } from "@/components/Text"
 import { Message } from "@/screens/ai/hooks/models"
 import { useAppTheme } from "@/theme/context"
 import type { ThemedStyle } from "@/theme/types"
@@ -26,10 +26,10 @@ export const MessageItem: FC<MessageItemProps> = ({ message, modelName }) => {
     >
       <Box style={[themed($messageBubble), isUser ? themed($userBubble) : themed($aiBubble)]}>
         {!isUser && modelName && (
-          <Text text={modelName} size="xxs" numberOfLines={1} style={themed($modelName)} />
+          <AppText text={modelName} size="xxs" numberOfLines={1} style={themed($modelName)} />
         )}
         {isUser ? (
-          <Text
+          <AppText
             text={message.text || "Thinking..."}
             preset="default"
             size="md"
@@ -37,7 +37,11 @@ export const MessageItem: FC<MessageItemProps> = ({ message, modelName }) => {
             style={[themed($messageText), themed($userMessageText)]}
           />
         ) : (
-          <Markdown style={$markdownStyles(theme)} mergeStyle={false}>
+          <Markdown
+            style={$markdownStyles(theme)}
+            mergeStyle={false}
+            rules={markdownRules}
+          >
             {message.text || "Thinking..."}
           </Markdown>
         )}
@@ -105,6 +109,75 @@ const $modelName: ThemedStyle<ViewStyle> = ({ spacing, colors }) => ({
   marginBottom: spacing.xxs,
   color: colors.tint,
 })
+
+// Custom rules to make markdown text selectable
+const markdownRules = {
+  body: (node: any, children: any, parent: any, styles: any) => (
+    <Text key={node.key} selectable style={styles.body}>
+      {children}
+    </Text>
+  ),
+  paragraph: (node: any, children: any, parent: any, styles: any) => (
+    <Text key={node.key} selectable style={styles.paragraph}>
+      {children}
+    </Text>
+  ),
+  heading1: (node: any, children: any, parent: any, styles: any) => (
+    <Text key={node.key} selectable style={styles.heading1}>
+      {children}
+    </Text>
+  ),
+  heading2: (node: any, children: any, parent: any, styles: any) => (
+    <Text key={node.key} selectable style={styles.heading2}>
+      {children}
+    </Text>
+  ),
+  heading3: (node: any, children: any, parent: any, styles: any) => (
+    <Text key={node.key} selectable style={styles.heading3}>
+      {children}
+    </Text>
+  ),
+  text: (node: any, children: any, parent: any, styles: any) => (
+    <Text key={node.key} selectable>
+      {node.content}
+    </Text>
+  ),
+  list_item: (node: any, children: any, parent: any, styles: any) => (
+    <Text key={node.key} selectable style={styles.list_item}>
+      {children}
+    </Text>
+  ),
+  link: (node: any, children: any, parent: any, styles: any) => (
+    <Text key={node.key} selectable style={styles.link}>
+      {children}
+    </Text>
+  ),
+  strong: (node: any, children: any, parent: any, styles: any) => (
+    <Text key={node.key} selectable style={styles.strong}>
+      {children}
+    </Text>
+  ),
+  em: (node: any, children: any, parent: any, styles: any) => (
+    <Text key={node.key} selectable style={styles.em}>
+      {children}
+    </Text>
+  ),
+  code_inline: (node: any, children: any, parent: any, styles: any) => (
+    <Text key={node.key} selectable style={styles.code_inline}>
+      {node.content}
+    </Text>
+  ),
+  code_block: (node: any, children: any, parent: any, styles: any) => (
+    <Text key={node.key} selectable style={styles.code_block}>
+      {node.content}
+    </Text>
+  ),
+  fence: (node: any, children: any, parent: any, styles: any) => (
+    <Text key={node.key} selectable style={styles.fence}>
+      {node.content}
+    </Text>
+  ),
+}
 
 const $markdownStyles = (theme: any) => ({
   body: {
