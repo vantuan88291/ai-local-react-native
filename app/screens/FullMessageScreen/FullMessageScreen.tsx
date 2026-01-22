@@ -71,7 +71,7 @@ export const FullMessageScreen: FC<AppStackScreenProps<"FullMessage">> = ({
 
               // Code
               code: {
-                backgroundColor: theme.colors.palette.neutral300,
+                backgroundColor: theme.colors.palette.primary200,
                 borderRadius: 8,
                 fontFamily: "monospace",
                 marginVertical: 6,

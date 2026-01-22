@@ -76,13 +76,13 @@ function CheckboxInput(props: CheckboxInputProps) {
   const onBackgroundColor = [
     disabled && colors.transparent,
     status === "error" && colors.errorBackground,
-    colors.palette.secondary500,
+    colors.palette.secondary100,
   ].filter(Boolean)[0]
 
   const iconTintColor = [
     disabled && colors.palette.neutral600,
     status === "error" && colors.error,
-    colors.palette.accent400,
+    colors.palette.secondary500,
   ].filter(Boolean)[0]
 
   return (
