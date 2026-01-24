@@ -3,7 +3,7 @@ import { FlatList, Keyboard, Platform } from "react-native"
 import { llama } from "@react-native-ai/llama"
 import { LlamaLanguageModel } from "@react-native-ai/llama/lib/typescript/ai-sdk"
 import { useRoute } from "@react-navigation/native"
-import { streamText } from "ai";
+import { streamText } from "ai"
 import { DropdownAlertType } from "react-native-dropdownalert"
 
 import { onAlert } from "@/app"
@@ -13,15 +13,20 @@ import { promptAI } from "@/utils/aiHelper"
 import { load, remove, save } from "@/utils/storage"
 
 const SCROLL_DEBOUNCE_MS = 100
-
-const ERROR_MESSAGE = "Sorry, an error occurred. Please try again."
+const KEEP_LATEST_CONTEXT_MESSAGES = 3
 
 const createMessage = (text: string, isUser: boolean): Message => ({
   id: `${Date.now()}-${Math.random()}`,
   text,
   isUser,
   timestamp: new Date(),
+  includeInContext: true,
 })
+
+const isContextFullError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.toLowerCase().includes("context")
+}
 
 export const useAiChat = () => {
   const route = useRoute<AppStackScreenProps<"ai">["route"]>()
@@ -76,7 +81,7 @@ export const useAiChat = () => {
     const messagesWithNewUser = [...chronological, userMessage, aiMessage]
 
     // Add newest-first: AI placeholder is newest (bottom), then user message, then existing
-    await setMessages((prev) => [aiMessage, userMessage, ...prev])
+    setMessages((prev) => [aiMessage, userMessage, ...prev])
     setIsLoading(true)
     listRef.current?.scrollToOffset({ offset: 0, animated: true })
     // Create abort controller for cleanup
@@ -89,38 +94,85 @@ export const useAiChat = () => {
         return
       }
 
-      // Format messages for AI SDK if context history is enabled
-      const streamParams = useContextHistory
-        ? {
-            model,
-            messages: messagesWithNewUser
-              .filter((msg) => msg.id !== aiMessageId && msg.text.trim())
-              .map((msg) => ({
-                role: msg.isUser ? ("user" as const) : ("assistant" as const),
-                content: msg.text,
-              })),
-          }
-        : {
-            model,
-            prompt: userMessageText,
-          }
-      const { textStream } = streamText(streamParams)
+      const attemptMessages = messagesWithNewUser.map((m) => ({
+        ...m,
+        includeInContext: m.includeInContext !== false,
+      }))
 
-      let fullText = ""
-      let started = false
-      // Stream and update message as text comes in
-      for await (const delta of textStream) {
-        if (!started) {
-          fullText = delta
-          started = true
-        } else {
-          fullText += delta
+      const pruneContextToLatest = (keepN: number) => {
+        // attemptMessages is chronological (oldest -> newest)
+        const eligible = attemptMessages.filter((m) => m.id !== aiMessage.id && m.text.trim())
+
+        // Keep last N eligible + always keep the current user message
+        const keepIds = new Set<string>()
+        keepIds.add(userMessage.id)
+        for (let i = Math.max(0, eligible.length - keepN); i < eligible.length; i++) {
+          keepIds.add(eligible[i].id)
         }
 
-        // Update AI message with streaming text
+        // Apply to attemptMessages
+        for (const m of attemptMessages) {
+          if (m.id === aiMessage.id) continue
+          if (!m.text.trim()) continue
+          m.includeInContext = keepIds.has(m.id)
+        }
+
+        // Reflect to state (newest-first)
         setMessages((prev) =>
-          prev.map((msg) => (msg.id === aiMessageId ? { ...msg, text: fullText } : msg)),
+          prev.map((m) => {
+            if (!m.text?.trim()) return m
+            if (m.id === aiMessage.id) return m
+            return { ...m, includeInContext: keepIds.has(m.id) }
+          }),
         )
+      }
+
+      const buildStreamParams = () => {
+        if (!useContextHistory) return { model, prompt: userMessageText }
+        return {
+          model,
+          messages: attemptMessages
+            .filter(
+              (msg) => msg.id !== aiMessageId && msg.text.trim() && msg.includeInContext !== false,
+            )
+            .map((msg) => ({
+              role: msg.isUser ? ("user" as const) : ("assistant" as const),
+              content: msg.text,
+            })),
+        }
+      }
+
+      const runStreamOnce = async () => {
+        const { textStream } = streamText(buildStreamParams() as any)
+        let fullText = ""
+        let started = false
+        for await (const delta of textStream) {
+          if (!started) {
+            fullText = delta
+            started = true
+          } else {
+            fullText += delta
+          }
+          setMessages((prev) =>
+            prev.map((msg) => (msg.id === aiMessageId ? { ...msg, text: fullText } : msg)),
+          )
+        }
+      }
+
+      try {
+        await runStreamOnce()
+      } catch (error) {
+        if (abortController.signal.aborted || !isMountedRef.current) throw error
+
+        // No multi-retry: if context is full, drop everything except last 3 + current user, then try once.
+        if (useContextHistory && isContextFullError(error)) {
+          pruneContextToLatest(KEEP_LATEST_CONTEXT_MESSAGES)
+          // Clear placeholder before fallback attempt
+          setMessages((prev) => prev.map((m) => (m.id === aiMessageId ? { ...m, text: "" } : m)))
+          await runStreamOnce()
+        } else {
+          throw error
+        }
       }
 
       if (isMountedRef.current && !abortController.signal.aborted) {
@@ -134,7 +186,7 @@ export const useAiChat = () => {
       console.error("[useAiChat] Error streaming AI response:", error)
 
       setMessages((prev) =>
-        prev.map((msg) => (msg.id === aiMessageId ? { ...msg, text: ERROR_MESSAGE } : msg)),
+        prev.map((msg) => (msg.id === aiMessageId ? { ...msg, text: String(error) } : msg)),
       )
 
       setIsLoading(false)
@@ -420,7 +472,11 @@ export const useAiChat = () => {
     const listMsg: any[] = load(modelId)
     if (listMsg?.length) {
       // Storage is assumed chronological; state is newest-first
-      setMessages([...listMsg].reverse())
+      setMessages(
+        [...listMsg]
+          .map((m) => ({ ...m, includeInContext: m?.includeInContext !== false }))
+          .reverse(),
+      )
       promptAI(modelId, "", {
         messages: [
           ...listMsg
@@ -452,7 +508,12 @@ export const useAiChat = () => {
       showSubscription.remove()
       if (msgRef.current?.length) {
         // Persist chronological for compatibility
-        save(modelId, [...msgRef.current].reverse())
+        save(
+          modelId,
+          [...msgRef.current]
+            .map((m) => ({ ...m, includeInContext: m?.includeInContext !== false }))
+            .reverse(),
+        )
       }
       msgRef.current = []
       isMountedRef.current = false

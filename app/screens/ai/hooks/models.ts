@@ -3,6 +3,11 @@ export interface Message {
   text: string
   isUser: boolean
   timestamp: Date
+  /**
+   * Whether this message is included in the next prompt context.
+   * We keep full history for UI, but may exclude old messages to avoid "Context is full".
+   */
+  includeInContext?: boolean
 }
 
 export type ModelLoadingState = "idle" | "downloading" | "preparing"

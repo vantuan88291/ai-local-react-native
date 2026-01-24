@@ -28,6 +28,18 @@ if (Platform.OS !== "web") {
 
     polyfillGlobal("TextEncoderStream", () => TextEncoderStream)
     polyfillGlobal("TextDecoderStream", () => TextDecoderStream)
+
+    // Some web-focused libs (including `ai`) expect DOMException to exist.
+    // React Native doesn't provide it, so we polyfill a minimal implementation.
+    if (!("DOMException" in global)) {
+      class DOMExceptionPolyfill extends Error {
+        constructor(message = "", name = "Error") {
+          super(message)
+          this.name = name
+        }
+      }
+      polyfillGlobal("DOMException", () => DOMExceptionPolyfill)
+    }
   }
 
   setupPolyfills()
