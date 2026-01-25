@@ -66,11 +66,12 @@ export const useAiChat = () => {
   /**
    * Handle sending a message
    */
-  const handleSend = useCallback(async () => {
-    if (modelStatus !== "ready") return
+  const handleSend = useCallback(() => {
+    const text = inputText.trim()
+    if (!text || modelStatus !== "ready") return
+
     setInputTextState("")
-    const templeInputText = inputText
-    streamHandleSend(templeInputText)
+    streamHandleSend(text)
   }, [inputText, modelStatus, streamHandleSend])
 
   /**
