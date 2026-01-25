@@ -1,6 +1,5 @@
-import { FC, useRef, useCallback, useMemo } from "react"
-import { FlatList, ListRenderItem, Platform, View } from "react-native"
-import { ViewStyle } from "react-native"
+import { FC, useRef, useCallback } from "react"
+import { FlatList, ListRenderItem, Platform, View, ViewStyle } from "react-native"
 import { BottomSheetModal } from "@gorhom/bottom-sheet"
 import { useNavigation } from "@react-navigation/native"
 import { KeyboardAvoidingView } from "react-native-keyboard-controller"
@@ -17,6 +16,8 @@ import type { ThemedStyle } from "@/theme/types"
 
 import { ChatInput, MessageItem, ModelDetailsSheet, ModelLoading } from "./components"
 import { useAiChat } from "./hooks/useAiChat"
+
+const $inputBoxStyle: ViewStyle = { flexShrink: 0 }
 
 export const AiScreen: FC<AppStackScreenProps<"ai">> = function AiScreen() {
   const navigation = useNavigation<AppStackScreenProps<"ai">["navigation"]>()
@@ -44,19 +45,23 @@ export const AiScreen: FC<AppStackScreenProps<"ai">> = function AiScreen() {
     remainTokens,
   } = useAiChat()
 
+  const isModelLoading = modelLoadingState !== "idle"
+
+  const handleGoBack = useCallback(() => {
+    navigation.goBack()
+  }, [navigation])
+
   const handleOpenModelDetails = useCallback(() => {
     if (modelLoadingState === "idle") {
       modelDetailsSheetRef.current?.present()
     }
   }, [modelLoadingState])
 
-  const handleRemoveModel = useCallback(async () => {
-    await removeModel()
-  }, [removeModel])
-
-  const handleClearConversation = useCallback(() => {
-    clearConversation()
-  }, [clearConversation])
+  const handleSetupModel = useCallback(() => {
+    if (selectedModelId) {
+      setupModel(selectedModelId)
+    }
+  }, [selectedModelId, setupModel])
 
   const handleViewFullMessage = useCallback(
     (message: Message) => {
@@ -83,8 +88,6 @@ export const AiScreen: FC<AppStackScreenProps<"ai">> = function AiScreen() {
 
   const keyExtractor = useCallback((item: Message) => item.id, [])
 
-  const isModelLoading = useMemo(() => modelLoadingState !== "idle", [modelLoadingState])
-
   const renderEmptyState = useCallback(() => {
     if (isModelLoading) return null
     return (
@@ -103,16 +106,16 @@ export const AiScreen: FC<AppStackScreenProps<"ai">> = function AiScreen() {
         <Header
           title="AI Assistant"
           leftIcon="back"
-          onLeftPress={() => navigation.goBack()}
+          onLeftPress={handleGoBack}
           rightIcon={!isModelLoading ? "more" : undefined}
           onRightPress={!isModelLoading ? handleOpenModelDetails : undefined}
         />
         <KeyboardAvoidingView
           behavior="translate-with-padding"
-          style={themed($keyboardAvoidingView)}
+          style={$styles.flex1}
           keyboardVerticalOffset={0}
         >
-          <Box flex={1} style={themed($containerBox)}>
+          <Box flex={1}>
             <FlatList
               ref={listRef}
               inverted
@@ -130,7 +133,7 @@ export const AiScreen: FC<AppStackScreenProps<"ai">> = function AiScreen() {
               keyboardShouldPersistTaps="handled"
               ListEmptyComponent={renderEmptyState}
             />
-            <Box style={themed($inputBox)}>
+            <Box style={$inputBoxStyle}>
               {isModelLoading ? (
                 <ModelLoading
                   modelLoadingState={modelLoadingState}
@@ -144,11 +147,7 @@ export const AiScreen: FC<AppStackScreenProps<"ai">> = function AiScreen() {
                   setInputText={setInputText}
                   handleSend={handleSend}
                   modelStatus={modelStatus}
-                  onSetupModelPress={() => {
-                    if (selectedModelId) {
-                      setupModel(selectedModelId)
-                    }
-                  }}
+                  onSetupModelPress={handleSetupModel}
                   useContextHistory={useContextHistory}
                   onToggleContextHistory={setUseContextHistory}
                 />
@@ -162,8 +161,8 @@ export const AiScreen: FC<AppStackScreenProps<"ai">> = function AiScreen() {
         ref={modelDetailsSheetRef}
         model={selectedModel}
         modelStatus={modelStatus}
-        onRemoveModel={handleRemoveModel}
-        onClearConversation={handleClearConversation}
+        onRemoveModel={removeModel}
+        onClearConversation={clearConversation}
         conversationSummary={conversationSummary}
       />
     </SafeAreaView>
@@ -173,18 +172,6 @@ export const AiScreen: FC<AppStackScreenProps<"ai">> = function AiScreen() {
 const $screen: ThemedStyle<ViewStyle> = ({ colors }) => ({
   flex: 1,
   backgroundColor: colors.background,
-})
-
-const $keyboardAvoidingView: ThemedStyle<ViewStyle> = () => ({
-  flex: 1,
-})
-
-const $containerBox: ThemedStyle<ViewStyle> = () => ({
-  flex: 1,
-})
-
-const $inputBox: ThemedStyle<ViewStyle> = () => ({
-  flexShrink: 0,
 })
 
 const $listContent: ThemedStyle<ViewStyle> = ({ spacing, colors }) => ({

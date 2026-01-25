@@ -1,3 +1,4 @@
+import { memo } from "react"
 import { ViewStyle, TextStyle } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
@@ -24,7 +25,7 @@ interface ChatInputProps {
   remainTokens?: number
 }
 
-export const ChatInput = ({
+export const ChatInput = memo(function ChatInput({
   inputText,
   setInputText,
   handleSend,
@@ -34,7 +35,7 @@ export const ChatInput = ({
   onToggleContextHistory,
   totalToken,
   remainTokens,
-}: ChatInputProps) => {
+}: ChatInputProps) {
   const { theme, themed } = useAppTheme()
   const insets = useSafeAreaInsets()
 
@@ -105,7 +106,7 @@ export const ChatInput = ({
       )}
     </Box>
   )
-}
+})
 
 const $inputContainer: ThemedStyle<ViewStyle> = ({ spacing, colors }) => ({
   paddingHorizontal: spacing.md,
