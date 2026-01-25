@@ -1,4 +1,4 @@
-import { FC } from "react"
+import { FC, memo } from "react";
 import { TextStyle, View, ViewStyle } from "react-native"
 
 import { Box } from "@/components/Box"
@@ -14,41 +14,52 @@ interface MessageItemProps {
   onViewFullMessage?: (message: Message) => void
 }
 
-export const MessageItem: FC<MessageItemProps> = ({ message, modelName, onViewFullMessage }) => {
-  const isUser = message.isUser
-  const { themed, theme } = useAppTheme()
+export const MessageItem: FC<MessageItemProps> = memo(
+  ({ message, modelName, onViewFullMessage }) => {
+    const isUser = message.isUser
+    const { themed, theme } = useAppTheme()
 
-  return (
-    <View
-      style={[
-        themed($messageContainer),
-        isUser ? themed($userMessageContainer) : themed($aiMessageContainer),
-      ]}
-    >
-      <Box style={[themed($messageBubble), isUser ? themed($userBubble) : themed($aiBubble)]}>
-        {!isUser && modelName && (
-          <Text text={modelName} size="xxs" numberOfLines={1} style={themed($modelName)} />
-        )}
-        <Text
-          text={message.text || "Thinking..."}
-          preset="default"
-          size="md"
-          selectable
-          style={[themed($messageText), isUser ? themed($userMessageText) : themed($aiMessageText)]}
-        />
-        {!isUser && onViewFullMessage && (
-          <PressableIcon
-            icon="expand"
-            size={16}
-            color={theme.colors.tint}
-            onPress={() => onViewFullMessage(message)}
-            containerStyle={themed($viewButton)}
+    return (
+      <View
+        style={[
+          themed($messageContainer),
+          isUser ? themed($userMessageContainer) : themed($aiMessageContainer),
+        ]}
+      >
+        <Box style={[themed($messageBubble), isUser ? themed($userBubble) : themed($aiBubble)]}>
+          {!isUser && modelName && (
+            <Text text={modelName} size="xxs" numberOfLines={1} style={themed($modelName)} />
+          )}
+          <Text
+            text={message.text || "Thinking..."}
+            preset="default"
+            size="md"
+            selectable
+            style={[themed($messageText), isUser ? themed($userMessageText) : themed($aiMessageText)]}
           />
-        )}
-      </Box>
-    </View>
-  )
-}
+          {!isUser && onViewFullMessage && (
+            <PressableIcon
+              icon="expand"
+              size={16}
+              color={theme.colors.tint}
+              onPress={() => onViewFullMessage(message)}
+              containerStyle={themed($viewButton)}
+            />
+          )}
+        </Box>
+      </View>
+    )
+  },
+  (prevProps, nextProps) => {
+    // Custom comparison - only re-render when necessary
+    return (
+      prevProps.message.id === nextProps.message.id &&
+      prevProps.message.text === nextProps.message.text &&
+      prevProps.message.isUser === nextProps.message.isUser &&
+      prevProps.modelName === nextProps.modelName
+    )
+  },
+)
 
 const $messageContainer: ThemedStyle<ViewStyle> = ({ spacing }) => ({
   marginVertical: spacing.xs,

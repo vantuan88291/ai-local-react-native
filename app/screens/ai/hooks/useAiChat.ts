@@ -15,6 +15,12 @@ import { load, remove, save } from "@/utils/storage"
 const SCROLL_DEBOUNCE_MS = 100
 const KEEP_LATEST_CONTEXT_MESSAGES = 3
 
+interface DownloadProgressEvent {
+  percentage?: number
+  loaded?: number
+  total?: number
+}
+
 const createMessage = (text: string, isUser: boolean): Message => ({
   id: `${Date.now()}-${Math.random()}`,
   text,
@@ -33,7 +39,7 @@ export const useAiChat = () => {
   const route = useRoute<AppStackScreenProps<"ai">["route"]>()
   const model = route.params?.model
   const modelId = model?.id
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messagesState, setMessagesState] = useState<Message[]>([])
   const [inputText, setInputTextState] = useState("")
   const [modelStatus, setModelStatus] = useState<ModelStatus>("not_setup")
   const [downloadProgress, setDownloadProgress] = useState<number>(0)
@@ -41,11 +47,23 @@ export const useAiChat = () => {
   const [useContextHistory, setUseContextHistory] = useState<boolean>(true)
   const [conversationSummary, setConversationSummary] = useState<string | null>(null)
   const modelRef = useRef<LlamaLanguageModel>(null)
-  const msgRef = useRef<any[]>([])
+  const msgRef = useRef<Message[]>([])
   const isSetupInProgressRef = useRef<boolean>(false)
   const isMountedRef = useRef<boolean>(true)
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const streamAbortControllerRef = useRef<AbortController | null>(null)
+
+  // Custom setMessages that syncs msgRef immediately
+  const setMessages = useCallback((updater: React.SetStateAction<Message[]>) => {
+    setMessagesState((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater
+      msgRef.current = next // Sync ref immediately
+      return next
+    })
+  }, [])
+
+  // Expose messagesState as messages for cleaner code
+  const messages = messagesState
 
   const setInputText = useCallback((text: string) => {
     setInputTextState(text)
@@ -60,6 +78,35 @@ export const useAiChat = () => {
       if (isMountedRef.current) listRef.current?.scrollToOffset({ offset: 0, animated: true })
     }, SCROLL_DEBOUNCE_MS)
   }, [])
+
+  /**
+   * Centralized error handler
+   */
+  const handleError = useCallback(
+    (
+      error: unknown,
+      context: string,
+      options: { showAlert?: boolean; cleanup?: () => void } = {},
+    ) => {
+      const { showAlert = true, cleanup } = options
+      const errorMessage = error instanceof Error ? error.message : String(error)
+
+      console.error(`[useAiChat] ${context}:`, error)
+
+      if (cleanup) cleanup()
+
+      if (showAlert) {
+        onAlert({
+          type: DropdownAlertType.Error,
+          title: context,
+          message: errorMessage,
+        })
+      }
+
+      return errorMessage
+    },
+    [],
+  )
 
   /**
    * Handle sending a message
@@ -144,9 +191,23 @@ export const useAiChat = () => {
       }
 
       const runStreamOnce = async () => {
-        const { textStream } = streamText(buildStreamParams() as any)
+        const { textStream } = streamText(buildStreamParams())
         let fullText = ""
         let started = false
+        let updateScheduled = false
+
+        const scheduleUpdate = () => {
+          if (updateScheduled) return
+          updateScheduled = true
+
+          requestAnimationFrame(() => {
+            setMessages((prev) =>
+              prev.map((msg) => (msg.id === aiMessageId ? { ...msg, text: fullText } : msg)),
+            )
+            updateScheduled = false
+          })
+        }
+
         for await (const delta of textStream) {
           if (!started) {
             fullText = delta
@@ -154,10 +215,13 @@ export const useAiChat = () => {
           } else {
             fullText += delta
           }
-          setMessages((prev) =>
-            prev.map((msg) => (msg.id === aiMessageId ? { ...msg, text: fullText } : msg)),
-          )
+          scheduleUpdate() // Throttled to ~60fps
         }
+
+        // Final update to ensure last delta is shown
+        setMessages((prev) =>
+          prev.map((msg) => (msg.id === aiMessageId ? { ...msg, text: fullText } : msg)),
+        )
       }
 
       try {
@@ -238,16 +302,11 @@ export const useAiChat = () => {
         console.log("[useAiChat] Model not downloaded yet")
         return false
       } catch (error) {
-        // Error checking or preparing model
-        console.error("[useAiChat] Error checking model:", error)
-        const errorMessage = error instanceof Error ? error.message : "Failed to check model"
-        // @ts-ignore
-        const model = llama.languageModel(modelId)
-        model.remove()
-        onAlert({
-          type: DropdownAlertType.Error,
-          title: "Model Error",
-          message: `Failed to check model: ${errorMessage}`,
+        handleError(error, "Model Check Failed", {
+          cleanup: () => {
+            const model = llama.languageModel(modelId!)
+            model.remove()
+          },
         })
         return false
       }
@@ -285,8 +344,7 @@ export const useAiChat = () => {
       setDownloadProgress(0)
       setSelectedModelId(null)
     } catch (error) {
-      console.error("[useAiChat] Error removing model:", error)
-      // TODO: Handle error - maybe show error message to user
+      handleError(error, "Failed to Remove Model", { showAlert: false })
     }
   }, [selectedModelId])
 
@@ -312,7 +370,7 @@ export const useAiChat = () => {
           setModelStatus("not_setup")
         }
       } catch (error) {
-        console.error("[useAiChat] Error removing model by ID:", error)
+        handleError(error, "Failed to Remove Model", { showAlert: false })
       }
     },
     [selectedModelId, modelStatus, removeModel],
@@ -332,7 +390,7 @@ export const useAiChat = () => {
     try {
       remove(modelId)
     } catch (error) {
-      console.error("[useAiChat] Error clearing conversation:", error)
+      handleError(error, "Failed to Clear Conversation", { showAlert: false })
     }
   }, [modelId])
   /**
@@ -390,9 +448,9 @@ export const useAiChat = () => {
         const model = llama.languageModel(modelId)
 
         // Download model with progress callback (if supported)
-        await model.download((event: any) => {
+        await model.download((event: DownloadProgressEvent) => {
           // Check if event has percentage property and component still mounted
-          if (event && typeof event.percentage === "number" && isMountedRef.current) {
+          if (event?.percentage !== undefined && isMountedRef.current) {
             setDownloadProgress(event.percentage)
           }
         })
@@ -415,15 +473,11 @@ export const useAiChat = () => {
           setModelStatus("ready")
         }
       } catch (error) {
-        console.error("[useAiChat] Error setting up model:", error)
-        const errorMessage = error instanceof Error ? error.message : "Failed to setup model"
-        const model = llama.languageModel(modelId)
-        model.remove()
-        // Determine error type based on current status
-        onAlert({
-          type: DropdownAlertType.Error,
-          title: `${modelStatus} Error`,
-          message: `Failed to download model: ${errorMessage}`,
+        handleError(error, `${modelStatus} Error`, {
+          cleanup: () => {
+            const model = llama.languageModel(modelId)
+            model.remove()
+          },
         })
 
         if (isMountedRef.current) {
@@ -470,16 +524,12 @@ export const useAiChat = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelId]) // Run when modelId changes
 
-  useEffect(() => {
-    msgRef.current = messages
-  }, [messages.map((item) => item.text)])
   /**
    * Cleanup: unload model on unmount
    */
   useEffect(() => {
     isMountedRef.current = true
-    // @ts-ignore
-    const listMsg: any[] = load(modelId)
+    const listMsg = load<Message[]>(modelId) || []
     if (listMsg?.length) {
       // Storage is assumed chronological; state is newest-first
       setMessages(

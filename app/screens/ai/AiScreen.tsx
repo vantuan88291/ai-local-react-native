@@ -1,5 +1,5 @@
 import { FC, useRef, useCallback, useMemo } from "react"
-import { FlatList, ListRenderItem, View } from "react-native"
+import { FlatList, ListRenderItem, Platform, View } from "react-native"
 import { ViewStyle } from "react-native"
 import { BottomSheetModal } from "@gorhom/bottom-sheet"
 import { useNavigation } from "@react-navigation/native"
@@ -119,6 +119,11 @@ export const AiScreen: FC<AppStackScreenProps<"ai">> = function AiScreen() {
               data={messages}
               renderItem={renderMessage}
               keyExtractor={keyExtractor}
+              windowSize={10}
+              maxToRenderPerBatch={10}
+              initialNumToRender={15}
+              updateCellsBatchingPeriod={50}
+              removeClippedSubviews={Platform.OS === "android"}
               contentContainerStyle={themed($listContent)}
               showsVerticalScrollIndicator={true}
               keyboardDismissMode="on-drag"
